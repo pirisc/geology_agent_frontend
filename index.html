@@ -104,12 +104,13 @@ async function send() {
   // Add user message
   chat.innerHTML += `<div class="user"><strong>You:</strong> ${escapeHtml(message)}</div>`;
   
-  // Add loading indicator
-  const loadingDiv = document.createElement('div');
-  loadingDiv.className = 'loading';
-  loadingDiv.id = 'loading';
-  loadingDiv.textContent = 'Thinking...';
-  chat.appendChild(loadingDiv);
+  // Create bot response div
+  const botDiv = document.createElement('div');
+  botDiv.className = 'bot';
+  botDiv.innerHTML = '<strong>Bot:</strong> ';
+  const responseSpan = document.createElement('span');
+  botDiv.appendChild(responseSpan);
+  chat.appendChild(botDiv);
   chat.scrollTop = chat.scrollHeight;
 
   try {
@@ -125,10 +126,6 @@ async function send() {
     });
 
     console.log("Response status:", res.status);
-    console.log("Response headers:", Object.fromEntries(res.headers.entries()));
-    
-    // Remove loading indicator
-    document.getElementById('loading')?.remove();
     
     if (!res.ok) {
       const errorText = await res.text();
@@ -136,25 +133,58 @@ async function send() {
       throw new Error(`Server error (${res.status}): ${errorText}`);
     }
 
-    const data = await res.json();
-    console.log("Response data:", data);
+    // Handle SSE stream
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
     
-    if (!data.response) {
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            console.log("Received data:", data);
+            
+            if (data.type === 'start') {
+              thread_id = data.thread_id;
+            } else if (data.type === 'content') {
+              responseSpan.textContent += data.chunk;
+              chat.scrollTop = chat.scrollHeight;
+            } else if (data.type === 'error') {
+              throw new Error(data.error);
+            }
+          } catch (e) {
+            console.error("Error parsing SSE data:", e, line);
+          }
+        }
+      }
+    }
+    
+    // If no content was received, show error
+    if (!responseSpan.textContent.trim()) {
       throw new Error("No response from bot");
     }
     
-    thread_id = data.thread_id;
-    chat.innerHTML += `<div class="bot"><strong>Bot:</strong> ${escapeHtml(data.response)}</div>`;
-    
   } catch (error) {
     console.error("Full error:", error);
-    document.getElementById('loading')?.remove();
     
     let errorMessage = error.message;
     if (error.message.includes('Failed to fetch')) {
       errorMessage = "Cannot connect to server. Make sure your Render service is running.";
     }
     
+    // Remove the bot div and show error
+    botDiv.remove();
     chat.innerHTML += `<div class="error"><strong>Error:</strong> ${errorMessage}<br><small>Check browser console (F12) for details</small></div>`;
   } finally {
     // Re-enable input
@@ -187,6 +217,4 @@ console.log("Chat interface loaded. API endpoint:", API_URL);
 </script>
 
 </body>
-
 </html>
-
