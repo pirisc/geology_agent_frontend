@@ -96,44 +96,106 @@ async function send() {
   
   if (!message) return;
   
+  // Disable input while processing
   input.value = "";
   input.disabled = true;
   sendBtn.disabled = true;
   
+  // Add user message
   chat.innerHTML += `<div class="user"><strong>You:</strong> ${escapeHtml(message)}</div>`;
   
-  const loadingDiv = document.createElement('div');
-  loadingDiv.className = 'loading';
-  loadingDiv.textContent = 'Thinking...';
-  chat.appendChild(loadingDiv);
+  // Create bot response container
+  const botDiv = document.createElement('div');
+  botDiv.className = 'bot';
+  botDiv.innerHTML = '<strong>Bot:</strong> ';
+  chat.appendChild(botDiv);
+  
+  const responseSpan = document.createElement('span');
+  botDiv.appendChild(responseSpan);
   chat.scrollTop = chat.scrollHeight;
 
   try {
+    console.log("Sending request to:", API_URL);
+    console.log("Payload:", { message, thread_id });
+    
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({ message, thread_id })
     });
-    
-    loadingDiv.remove();
+
+    console.log("Response status:", res.status);
     
     if (!res.ok) {
-      throw new Error(`Server error: ${res.status}`);
+      const errorText = await res.text();
+      console.error("Error response:", errorText);
+      throw new Error(`Server error (${res.status}): ${errorText}`);
     }
 
-    const data = await res.json();
-    
-    if (data.error) {
-      throw new Error(data.error);
+    // Stream the response
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          
+          if (data === '[DONE]') {
+            continue;
+          }
+          
+          try {
+            const parsed = JSON.parse(data);
+            
+            if (parsed.thread_id) {
+              thread_id = parsed.thread_id;
+              console.log("Thread ID:", thread_id);
+            } else if (parsed.content) {
+              // Append token to response
+              responseSpan.textContent += parsed.content;
+              chat.scrollTop = chat.scrollHeight;
+            }
+          } catch (e) {
+            console.warn("Could not parse:", data);
+          }
+        }
+      }
     }
     
-    thread_id = data.thread_id;
-    chat.innerHTML += `<div class="bot"><strong>Bot:</strong> ${escapeHtml(data.response)}</div>`;
+    // Check if we got any response
+    if (!responseSpan.textContent.trim()) {
+      throw new Error("No response received from bot");
+    }
     
   } catch (error) {
-    loadingDiv.remove();
-    chat.innerHTML += `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+    console.error("Full error:", error);
+    
+    // Remove the empty bot div if there was an error
+    if (!responseSpan.textContent.trim()) {
+      botDiv.remove();
+    }
+    
+    let errorMessage = error.message;
+    if (error.message.includes('Failed to fetch')) {
+      errorMessage = "Cannot connect to server. Make sure your Render service is running.";
+    }
+    
+    chat.innerHTML += `<div class="error"><strong>Error:</strong> ${errorMessage}<br><small>Check browser console (F12) for details</small></div>`;
   } finally {
+    // Re-enable input
     input.disabled = false;
     sendBtn.disabled = false;
     input.focus();
@@ -141,20 +203,25 @@ async function send() {
   }
 }
 
+// Escape HTML to prevent XSS
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
+// Allow Enter key to send
 document.getElementById("input").addEventListener("keypress", function(e) {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     send();
   }
 });
 
+// Auto-focus on input
 document.getElementById("input").focus();
+
+console.log("Chat interface loaded. API endpoint:", API_URL);
 </script>
 
 </body>
