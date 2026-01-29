@@ -38,6 +38,13 @@
       color: #1f2937;
       padding: 24px 32px;
       border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-left {
+      flex: 1;
     }
 
     .header h1 {
@@ -66,6 +73,30 @@
       font-size: 14px;
       color: #6b7280;
       font-weight: 400;
+    }
+
+    .new-chat-btn {
+      padding: 10px 18px;
+      background: white;
+      color: #3b82f6;
+      border: 1.5px solid #3b82f6;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .new-chat-btn:hover {
+      background: #eff6ff;
+    }
+
+    .new-chat-btn:active {
+      transform: scale(0.98);
     }
 
     #chat { 
@@ -333,6 +364,18 @@
 
       .header {
         padding: 20px 20px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .header-left {
+        width: 100%;
+      }
+
+      .new-chat-btn {
+        width: 100%;
+        justify-content: center;
       }
 
       .header h1 {
@@ -366,11 +409,17 @@
 
 <div class="container">
   <div class="header">
-    <h1>
-      <div class="header-icon">🌍</div>
-      Geology Assistant
-    </h1>
-    <p>Expert guidance on geology, minerals, and Earth science</p>
+    <div class="header-left">
+      <h1>
+        <div class="header-icon">🌍</div>
+        Geology Assistant
+      </h1>
+      <p>Expert guidance on geology, minerals, and Earth science</p>
+    </div>
+    <button class="new-chat-btn" onclick="newChat()">
+      <span>✨</span>
+      New Chat
+    </button>
   </div>
 
   <div id="chat">
@@ -401,6 +450,37 @@
 <script>
 let thread_id = null;
 const API_URL = "https://geology-agent.onrender.com/chat";
+
+function newChat() {
+  // Reset thread_id to start fresh conversation
+  thread_id = null;
+  
+  // Clear chat
+  const chat = document.getElementById("chat");
+  chat.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-state-icon">💎</div>
+      <h2>Welcome to your Geology Assistant</h2>
+      <p>Ask me anything about rocks, minerals, plate tectonics, fossils, or any Earth science topic. I'm here to help!</p>
+      <div class="suggestions">
+        <div class="suggestion-card" onclick="sendSuggestion('What are the main types of rocks?')">
+          What are the main types of rocks?
+        </div>
+        <div class="suggestion-card" onclick="sendSuggestion('Explain plate tectonics')">
+          Explain plate tectonics
+        </div>
+        <div class="suggestion-card" onclick="sendSuggestion('How are minerals identified?')">
+          How are minerals identified?
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Clear and focus input
+  const input = document.getElementById("input");
+  input.value = "";
+  input.focus();
+}
 
 function sendSuggestion(text) {
   const input = document.getElementById("input");
