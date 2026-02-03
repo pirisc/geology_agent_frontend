@@ -177,11 +177,22 @@
       border-radius: 12px;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       line-height: 1.6;
-      white-space: pre-wrap;
       word-wrap: break-word;
       color: #374151;
       font-size: 15px;
       border: 1px solid #e5e7eb;
+    }
+
+    .message-content .text-part {
+      white-space: pre-wrap;
+      display: inline;
+    }
+
+    .message-content img {
+      max-width: 100%;
+      border-radius: 10px;
+      margin: 10px 0;
+      display: block;
     }
 
     .user .message-content {
@@ -451,11 +462,50 @@
 let thread_id = null;
 const API_URL = "https://geology-agent.onrender.com/chat";
 
+// ─────────────────────────────────────────────
+// Renders text + markdown images into a container
+// Called on every chunk so images appear as soon
+// as the full markdown pattern is received.
+// ─────────────────────────────────────────────
+function renderContent(container, text) {
+  const imageRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
+  
+  container.innerHTML = '';
+  let lastIndex = 0;
+  let match;
+
+  while ((match = imageRegex.exec(text)) !== null) {
+    // Add any text before this image
+    const textBefore = text.slice(lastIndex, match.index);
+    if (textBefore) {
+      const span = document.createElement('span');
+      span.className = 'text-part';
+      span.textContent = textBefore;
+      container.appendChild(span);
+    }
+
+    // Add the image
+    const img = document.createElement('img');
+    img.src = match[2];
+    img.alt = match[1] || 'Geological Illustration';
+    container.appendChild(img);
+
+    lastIndex = imageRegex.lastIndex;
+  }
+
+  // Add any remaining text after the last image (or all text if no images)
+  const textAfter = text.slice(lastIndex);
+  if (textAfter) {
+    const span = document.createElement('span');
+    span.className = 'text-part';
+    span.textContent = textAfter;
+    container.appendChild(span);
+  }
+}
+
 function newChat() {
-  // Reset thread_id to start fresh conversation
   thread_id = null;
   
-  // Clear chat
   const chat = document.getElementById("chat");
   chat.innerHTML = `
     <div class="empty-state">
@@ -476,7 +526,6 @@ function newChat() {
     </div>
   `;
   
-  // Clear and focus input
   const input = document.getElementById("input");
   input.value = "";
   input.focus();
@@ -498,9 +547,7 @@ async function send() {
   
   // Remove empty state if present
   const emptyState = chat.querySelector('.empty-state');
-  if (emptyState) {
-    emptyState.remove();
-  }
+  if (emptyState) emptyState.remove();
   
   // Disable input while processing
   input.value = "";
@@ -517,7 +564,7 @@ async function send() {
   chat.appendChild(userMsg);
   chat.scrollTop = chat.scrollHeight;
   
-  // Create bot response container
+  // Create bot response container with typing indicator
   const botMsg = document.createElement('div');
   botMsg.className = 'message bot';
   botMsg.innerHTML = `
@@ -556,6 +603,7 @@ async function send() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let fullText = '';  // accumulates the entire response
 
     while (true) {
       const { done, value } = await reader.read();
@@ -577,7 +625,8 @@ async function send() {
             if (parsed.thread_id) {
               thread_id = parsed.thread_id;
             } else if (parsed.content) {
-              responseContent.textContent += parsed.content;
+              fullText += parsed.content;
+              renderContent(responseContent, fullText);
               chat.scrollTop = chat.scrollHeight;
             }
           } catch (e) {
@@ -586,8 +635,21 @@ async function send() {
         }
       }
     }
+
+    // Final render pass — in case the buffer still has leftover data
+    if (buffer.trim()) {
+      try {
+        const parsed = JSON.parse(buffer);
+        if (parsed.content) {
+          fullText += parsed.content;
+          renderContent(responseContent, fullText);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
     
-    if (!responseContent.textContent.trim()) {
+    if (!fullText.trim()) {
       throw new Error("No response received from bot");
     }
     
