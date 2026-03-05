@@ -633,7 +633,9 @@
       border-radius: 8px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.7);
       object-fit: contain;
-      cursor: zoom-out;
+      transition: transform 0.1s ease-out;
+      user-select: none;
+      -webkit-user-drag: none;
     }
 
     .modal-close {
@@ -821,10 +823,12 @@
 </div>
 
 <!-- Image Modal -->
-<div class="image-modal" id="image-modal" onclick="closeImageModal()">
-  <div class="modal-close" onclick="closeImageModal()">&times;</div>
-  <img id="modal-image" src="" alt="Expanded view">
-  <div class="modal-info">Click image or press ESC to close • Right-click to save</div>
+<div class="image-modal" id="image-modal">
+  <div class="modal-close" onclick="closeImageModal(event)">&times;</div>
+  <img id="modal-image" src="" alt="Geological Illustration" onclick="event.stopPropagation()">
+  <div class="modal-info">
+    <span>🔍 Click and drag to pan • Scroll to zoom • Press ESC or click background to close</span>
+  </div>
 </div>
 
 <script>
@@ -975,39 +979,50 @@ function renderContent(container, text) {
   container.innerHTML = '';
   let lastIndex = 0;
   let match;
+  const images = [];
 
+  // First, extract all images
   while ((match = imageRegex.exec(text)) !== null) {
-    const textBefore = text.slice(lastIndex, match.index);
-    if (textBefore) {
+    images.push({
+      index: match.index,
+      endIndex: imageRegex.lastIndex,
+      url: match[2],
+      alt: match[1]
+    });
+  }
+
+  // Now render text and images in order
+  images.forEach((img, i) => {
+    // Add text before this image
+    const textBefore = text.slice(lastIndex, img.index);
+    if (textBefore.trim()) {
       const span = document.createElement('span');
       span.className = 'text-part';
-      // Remove any image markdown from text before rendering
-      const cleanText = textBefore.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '');
-      span.innerHTML = renderMarkdown(cleanText);
+      span.innerHTML = renderMarkdown(textBefore);
       container.appendChild(span);
     }
 
-    const img = document.createElement('img');
-    img.src = match[2];
-    img.alt = match[1] || 'Geological Illustration';
-    img.title = 'Click to view full size';
-    img.style.cursor = 'zoom-in';
-    img.onclick = (e) => {
+    // Add the image
+    const imgEl = document.createElement('img');
+    imgEl.src = img.url;
+    imgEl.alt = img.alt || 'Geological Illustration';
+    imgEl.title = 'Click to zoom';
+    imgEl.loading = 'lazy';
+    imgEl.onclick = (e) => {
       e.stopPropagation();
-      openImageModal(match[2]);
+      openImageModal(img.url);
     };
-    container.appendChild(img);
+    container.appendChild(imgEl);
 
-    lastIndex = imageRegex.lastIndex;
-  }
+    lastIndex = img.endIndex;
+  });
 
+  // Add any remaining text after the last image
   const textAfter = text.slice(lastIndex);
-  if (textAfter) {
+  if (textAfter.trim()) {
     const span = document.createElement('span');
     span.className = 'text-part';
-    // Remove any image markdown from text before rendering
-    const cleanText = textAfter.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '');
-    span.innerHTML = renderMarkdown(cleanText);
+    span.innerHTML = renderMarkdown(textAfter);
     container.appendChild(span);
   }
 }
@@ -1027,7 +1042,7 @@ function renderMarkdown(text) {
   // Inline code: `code`
   text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
   
-  // Links: [text](url)
+  // Links: [text](url) - but NOT image links
   text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   
   // Line breaks
@@ -1037,19 +1052,100 @@ function renderMarkdown(text) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// IMAGE MODAL
+// IMAGE MODAL WITH ZOOM AND PAN
 // ═══════════════════════════════════════════════════════════════════════════
+
+let modalZoom = 1;
+let modalPanning = false;
+let modalPanStart = { x: 0, y: 0 };
+let modalPanOffset = { x: 0, y: 0 };
 
 function openImageModal(src) {
   const modal = document.getElementById("image-modal");
   const modalImg = document.getElementById("modal-image");
+  
+  // Reset zoom and pan
+  modalZoom = 1;
+  modalPanOffset = { x: 0, y: 0 };
+  
   modalImg.src = src;
+  modalImg.style.transform = 'scale(1) translate(0, 0)';
   modal.classList.add("active");
+  
+  // Enable zoom with mouse wheel
+  modalImg.onwheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    modalZoom *= delta;
+    modalZoom = Math.max(0.5, Math.min(modalZoom, 5)); // Limit zoom between 0.5x and 5x
+    updateModalTransform();
+  };
+  
+  // Enable pan with mouse drag
+  modalImg.onmousedown = (e) => {
+    if (modalZoom > 1) {
+      modalPanning = true;
+      modalPanStart = { x: e.clientX - modalPanOffset.x, y: e.clientY - modalPanOffset.y };
+      modalImg.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+  };
+  
+  document.onmousemove = (e) => {
+    if (modalPanning) {
+      modalPanOffset = {
+        x: e.clientX - modalPanStart.x,
+        y: e.clientY - modalPanStart.y
+      };
+      updateModalTransform();
+    }
+  };
+  
+  document.onmouseup = () => {
+    if (modalPanning) {
+      modalPanning = false;
+      if (modalZoom > 1) {
+        modalImg.style.cursor = 'grab';
+      }
+    }
+  };
+  
+  // Update cursor based on zoom
+  modalImg.style.cursor = modalZoom > 1 ? 'grab' : 'default';
+  
+  // Click background to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      closeImageModal();
+    }
+  };
 }
 
-function closeImageModal() {
+function updateModalTransform() {
+  const modalImg = document.getElementById("modal-image");
+  modalImg.style.transform = `scale(${modalZoom}) translate(${modalPanOffset.x / modalZoom}px, ${modalPanOffset.y / modalZoom}px)`;
+  modalImg.style.cursor = modalZoom > 1 ? 'grab' : 'default';
+}
+
+function closeImageModal(event) {
+  if (event) {
+    event.stopPropagation();
+  }
   const modal = document.getElementById("image-modal");
+  const modalImg = document.getElementById("modal-image");
   modal.classList.remove("active");
+  
+  // Clean up event listeners
+  modalImg.onwheel = null;
+  modalImg.onmousedown = null;
+  document.onmousemove = null;
+  document.onmouseup = null;
+  modal.onclick = null;
+  
+  // Reset state
+  modalZoom = 1;
+  modalPanning = false;
+  modalPanOffset = { x: 0, y: 0 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
