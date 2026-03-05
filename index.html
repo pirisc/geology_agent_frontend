@@ -193,6 +193,12 @@
       border-radius: 10px;
       margin: 10px 0;
       display: block;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .message-content img:hover {
+      transform: scale(1.02);
     }
 
     .user .message-content {
@@ -366,6 +372,50 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
 
+    /* Image modal */
+    .image-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .image-modal.active {
+      display: flex;
+    }
+
+    .image-modal img {
+      max-width: 90%;
+      max-height: 90%;
+      border-radius: 8px;
+    }
+
+    /* Connection status */
+    .connection-status {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      display: none;
+    }
+
+    .connection-status.error {
+      display: block;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
     @media (max-width: 768px) {
       .container {
         height: 100vh;
@@ -419,6 +469,8 @@
 <body>
 
 <div class="container">
+  <div class="connection-status" id="connection-status"></div>
+  
   <div class="header">
     <div class="header-left">
       <h1>
@@ -453,19 +505,34 @@
   </div>
 
   <div class="input-container">
-    <input id="input" placeholder="Ask about geology..." autocomplete="off">
+    <textarea id="input" placeholder="Ask about geology..." autocomplete="off" rows="1"></textarea>
     <button id="send-btn" onclick="send()">Send</button>
   </div>
+</div>
+
+<!-- Image Modal -->
+<div class="image-modal" id="image-modal" onclick="closeImageModal()">
+  <img id="modal-image" src="" alt="Expanded view">
 </div>
 
 <script>
 let thread_id = null;
 const API_URL = "https://geology-agent.onrender.com/chat";
+let isConnecting = false;
+let connectionRetries = 0;
+const MAX_RETRIES = 3;
+
+// ─────────────────────────────────────────────
+// Auto-resize textarea
+// ─────────────────────────────────────────────
+const input = document.getElementById("input");
+input.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 120) + "px";
+});
 
 // ─────────────────────────────────────────────
 // Renders text + markdown images into a container
-// Called on every chunk so images appear as soon
-// as the full markdown pattern is received.
 // ─────────────────────────────────────────────
 function renderContent(container, text) {
   const imageRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
@@ -488,12 +555,16 @@ function renderContent(container, text) {
     const img = document.createElement('img');
     img.src = match[2];
     img.alt = match[1] || 'Geological Illustration';
+    img.onclick = (e) => {
+      e.stopPropagation();
+      openImageModal(match[2]);
+    };
     container.appendChild(img);
 
     lastIndex = imageRegex.lastIndex;
   }
 
-  // Add any remaining text after the last image (or all text if no images)
+  // Add any remaining text
   const textAfter = text.slice(lastIndex);
   if (textAfter) {
     const span = document.createElement('span');
@@ -503,8 +574,42 @@ function renderContent(container, text) {
   }
 }
 
+// ─────────────────────────────────────────────
+// Image modal functions
+// ─────────────────────────────────────────────
+function openImageModal(src) {
+  const modal = document.getElementById("image-modal");
+  const modalImg = document.getElementById("modal-image");
+  modalImg.src = src;
+  modal.classList.add("active");
+}
+
+function closeImageModal() {
+  const modal = document.getElementById("image-modal");
+  modal.classList.remove("active");
+}
+
+// ─────────────────────────────────────────────
+// Connection status
+// ─────────────────────────────────────────────
+function showConnectionError(message) {
+  const status = document.getElementById("connection-status");
+  status.textContent = message;
+  status.className = "connection-status error";
+}
+
+function hideConnectionError() {
+  const status = document.getElementById("connection-status");
+  status.style.display = "none";
+}
+
+// ─────────────────────────────────────────────
+// New chat
+// ─────────────────────────────────────────────
 function newChat() {
   thread_id = null;
+  connectionRetries = 0;
+  hideConnectionError();
   
   const chat = document.getElementById("chat");
   chat.innerHTML = `
@@ -528,16 +633,25 @@ function newChat() {
   
   const input = document.getElementById("input");
   input.value = "";
+  input.style.height = "auto";
   input.focus();
 }
 
+// ─────────────────────────────────────────────
+// Send suggestion
+// ─────────────────────────────────────────────
 function sendSuggestion(text) {
   const input = document.getElementById("input");
   input.value = text;
   send();
 }
 
+// ─────────────────────────────────────────────
+// Main send function
+// ─────────────────────────────────────────────
 async function send() {
+  if (isConnecting) return;
+  
   const input = document.getElementById("input");
   const chat = document.getElementById("chat");
   const sendBtn = document.getElementById("send-btn");
@@ -545,14 +659,22 @@ async function send() {
   
   if (!message) return;
   
+  // Validate message length
+  if (message.length > 10000) {
+    alert("Message is too long. Please keep it under 10,000 characters.");
+    return;
+  }
+  
   // Remove empty state if present
   const emptyState = chat.querySelector('.empty-state');
   if (emptyState) emptyState.remove();
   
   // Disable input while processing
   input.value = "";
+  input.style.height = "auto";
   input.disabled = true;
   sendBtn.disabled = true;
+  isConnecting = true;
   
   // Add user message
   const userMsg = document.createElement('div');
@@ -583,27 +705,43 @@ async function send() {
   const responseContent = botMsg.querySelector('.message-content');
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ message, thread_id })
+      body: JSON.stringify({ message, thread_id }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!res.ok) {
       const errorText = await res.text();
-      throw new Error(`Server error (${res.status}): ${errorText}`);
+      let errorMessage = `Server error (${res.status})`;
+      
+      if (res.status === 429) {
+        errorMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (res.status >= 500) {
+        errorMessage = "Server is experiencing issues. Please try again later.";
+      }
+      
+      throw new Error(errorMessage);
     }
 
     // Remove typing indicator
     responseContent.innerHTML = '';
+    hideConnectionError();
+    connectionRetries = 0;
     
     // Stream the response
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let fullText = '';  // accumulates the entire response
+    let fullText = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -628,15 +766,19 @@ async function send() {
               fullText += parsed.content;
               renderContent(responseContent, fullText);
               chat.scrollTop = chat.scrollHeight;
+            } else if (parsed.error) {
+              throw new Error(parsed.error);
             }
           } catch (e) {
-            console.warn("Could not parse:", data);
+            if (e.message !== "Unexpected end of JSON input") {
+              console.warn("Could not parse:", data, e);
+            }
           }
         }
       }
     }
 
-    // Final render pass — in case the buffer still has leftover data
+    // Final render pass
     if (buffer.trim()) {
       try {
         const parsed = JSON.parse(buffer);
@@ -650,41 +792,74 @@ async function send() {
     }
     
     if (!fullText.trim()) {
-      throw new Error("No response received from bot");
+      throw new Error("No response received from server");
     }
     
   } catch (error) {
     console.error("Full error:", error);
     
+    let errorMessage = error.message;
+    
+    // Handle specific error types
+    if (error.name === 'AbortError') {
+      errorMessage = "Request timed out. Please try again with a shorter message.";
+    } else if (!navigator.onLine) {
+      errorMessage = "No internet connection. Please check your network.";
+    }
+    
     botMsg.className = 'message error';
     botMsg.innerHTML = `
       <div class="message-avatar">!</div>
       <div class="message-content">
-        <strong>Error:</strong> ${escapeHtml(error.message)}
+        <strong>Error:</strong> ${escapeHtml(errorMessage)}
       </div>
     `;
+    
+    // Show persistent connection error
+    if (connectionRetries < MAX_RETRIES) {
+      connectionRetries++;
+      showConnectionError(`Connection issue (attempt ${connectionRetries}/${MAX_RETRIES})`);
+    } else {
+      showConnectionError("Unable to connect. Please check the API status.");
+    }
+    
   } finally {
     input.disabled = false;
     sendBtn.disabled = false;
+    isConnecting = false;
     input.focus();
     chat.scrollTop = chat.scrollHeight;
   }
 }
 
+// ─────────────────────────────────────────────
+// Utility functions
+// ─────────────────────────────────────────────
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-document.getElementById("input").addEventListener("keypress", function(e) {
+// ─────────────────────────────────────────────
+// Event listeners
+// ─────────────────────────────────────────────
+input.addEventListener("keypress", function(e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     send();
   }
 });
 
-document.getElementById("input").focus();
+// Close modal with Escape key
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    closeImageModal();
+  }
+});
+
+// Focus input on load
+input.focus();
 </script>
 
 </body>
