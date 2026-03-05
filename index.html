@@ -51,7 +51,7 @@
       height: 750px;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow: visible;
       position: relative;
     }
 
@@ -70,6 +70,13 @@
       z-index: 0;
     }
 
+    .chat-wrapper {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
     .header {
       background: linear-gradient(135deg, var(--slate-blue) 0%, var(--mineral-blue) 100%);
       color: white;
@@ -79,7 +86,8 @@
       justify-content: space-between;
       align-items: flex-start;
       position: relative;
-      z-index: 1;
+      z-index: 10;
+      overflow: visible;
     }
 
     .header-left {
@@ -121,6 +129,8 @@
       display: flex;
       gap: 10px;
       align-items: center;
+      position: relative;
+      z-index: 100;
     }
 
     .icon-btn {
@@ -139,6 +149,7 @@
       gap: 8px;
       white-space: nowrap;
       backdrop-filter: blur(10px);
+      position: relative;
     }
 
     .icon-btn:hover {
@@ -153,20 +164,19 @@
 
     .language-selector {
       position: relative;
+      z-index: 10000;
     }
 
     .lang-dropdown {
       display: none;
-      position: absolute;
-      top: 100%;
-      right: 0;
-      margin-top: 8px;
+      position: fixed;
+      top: auto;
+      right: auto;
       background: white;
       border-radius: 10px;
-      box-shadow: var(--shadow-lg);
-      overflow: visible;
-      z-index: 9999;
-      min-width: 140px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      z-index: 99999;
+      min-width: 160px;
       border: 2px solid var(--rock-gray);
     }
 
@@ -208,15 +218,13 @@
     }
 
     #chat { 
-      flex: 1;
+      height: 100%;
       padding: 32px 36px;
       overflow-y: auto;
       background: var(--sediment-beige);
       display: flex;
       flex-direction: column;
       gap: 24px;
-      position: relative;
-      z-index: 1;
     }
 
     #chat::-webkit-scrollbar {
@@ -601,11 +609,12 @@
       top: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.92);
+      background: rgba(0, 0, 0, 0.95);
       align-items: center;
       justify-content: center;
-      cursor: pointer;
+      cursor: zoom-out;
       backdrop-filter: blur(4px);
+      padding: 20px;
     }
 
     .image-modal.active {
@@ -619,10 +628,12 @@
     }
 
     .image-modal img {
-      max-width: 92%;
-      max-height: 92%;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      max-width: 95%;
+      max-height: 95%;
+      border-radius: 8px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      object-fit: contain;
+      cursor: zoom-out;
     }
 
     .modal-close {
@@ -637,13 +648,32 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0,0,0,0.7);
       border-radius: 10px;
       transition: all 0.2s;
+      z-index: 1001;
+      border: 2px solid rgba(255,255,255,0.2);
     }
 
     .modal-close:hover {
+      background: rgba(0,0,0,0.9);
+      border-color: rgba(255,255,255,0.4);
+      transform: rotate(90deg);
+    }
+
+    .modal-info {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
       background: rgba(0,0,0,0.7);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
     }
 
     /* Connection status */
@@ -680,6 +710,7 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 14px;
+        overflow: visible;
       }
 
       .header-left {
@@ -704,6 +735,10 @@
       .header p {
         margin-left: 52px;
         font-size: 14px;
+      }
+
+      .chat-wrapper {
+        overflow: hidden;
       }
 
       #chat {
@@ -739,7 +774,7 @@
         <div class="header-icon">🪨</div>
         Rocky
       </h1>
-      <p>Your expert guide to Earth sciences and Geology</p>
+      <p>Your expert guide to Earth sciences and geology</p>
     </div>
     <div class="header-controls">
       <button class="icon-btn" onclick="newChat()">
@@ -765,14 +800,16 @@
     </div>
   </div>
 
-  <div id="chat">
-    <div class="empty-state">
-      <div class="empty-state-icon">💎</div>
-      <h2 data-lang-key="welcomeTitle">Welcome to Rocky</h2>
-      <p data-lang-key="welcomeText">Your AI companion for exploring the fascinating world of geology, minerals, and Earth sciences.</p>
-      <div class="empty-state-subtitle" data-lang-key="suggestionsTitle">🌍 Popular Topics to Explore</div>
-      <div class="suggestions" id="suggestions-container">
-        <!-- Will be populated by JavaScript -->
+  <div class="chat-wrapper">
+    <div id="chat">
+      <div class="empty-state">
+        <div class="empty-state-icon">💎</div>
+        <h2 data-lang-key="welcomeTitle">Welcome to Rocky</h2>
+        <p data-lang-key="welcomeText">Your AI companion for exploring the fascinating world of geology, minerals, and Earth sciences.</p>
+        <div class="empty-state-subtitle" data-lang-key="suggestionsTitle">🌍 Popular Topics to Explore</div>
+        <div class="suggestions" id="suggestions-container">
+          <!-- Will be populated by JavaScript -->
+        </div>
       </div>
     </div>
   </div>
@@ -787,6 +824,7 @@
 <div class="image-modal" id="image-modal" onclick="closeImageModal()">
   <div class="modal-close" onclick="closeImageModal()">&times;</div>
   <img id="modal-image" src="" alt="Expanded view">
+  <div class="modal-info">Click image or press ESC to close • Right-click to save</div>
 </div>
 
 <script>
@@ -842,10 +880,20 @@ const translations = {
 
 function toggleLanguageMenu() {
   const dropdown = document.getElementById('lang-dropdown');
-  dropdown.classList.toggle('active');
+  const button = event.target.closest('.icon-btn');
   
-  // Close on click outside
   if (dropdown.classList.contains('active')) {
+    dropdown.classList.remove('active');
+    document.removeEventListener('click', closeLanguageMenuOutside);
+  } else {
+    // Position dropdown below the button
+    const rect = button.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 8) + 'px';
+    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    
+    dropdown.classList.add('active');
+    
+    // Close on click outside
     setTimeout(() => {
       document.addEventListener('click', closeLanguageMenuOutside);
     }, 0);
@@ -933,13 +981,17 @@ function renderContent(container, text) {
     if (textBefore) {
       const span = document.createElement('span');
       span.className = 'text-part';
-      span.innerHTML = renderMarkdown(textBefore);
+      // Remove any image markdown from text before rendering
+      const cleanText = textBefore.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '');
+      span.innerHTML = renderMarkdown(cleanText);
       container.appendChild(span);
     }
 
     const img = document.createElement('img');
     img.src = match[2];
     img.alt = match[1] || 'Geological Illustration';
+    img.title = 'Click to view full size';
+    img.style.cursor = 'zoom-in';
     img.onclick = (e) => {
       e.stopPropagation();
       openImageModal(match[2]);
@@ -953,7 +1005,9 @@ function renderContent(container, text) {
   if (textAfter) {
     const span = document.createElement('span');
     span.className = 'text-part';
-    span.innerHTML = renderMarkdown(textAfter);
+    // Remove any image markdown from text before rendering
+    const cleanText = textAfter.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '');
+    span.innerHTML = renderMarkdown(cleanText);
     container.appendChild(span);
   }
 }
