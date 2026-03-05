@@ -164,9 +164,10 @@
       background: white;
       border-radius: 10px;
       box-shadow: var(--shadow-lg);
-      overflow: hidden;
-      z-index: 100;
+      overflow: visible;
+      z-index: 9999;
       min-width: 140px;
+      border: 2px solid var(--rock-gray);
     }
 
     .lang-dropdown.active {
@@ -296,6 +297,60 @@
     .message-content .text-part {
       white-space: pre-wrap;
       display: inline;
+    }
+
+    .message-content strong {
+      font-weight: 700;
+      color: var(--granite-dark);
+    }
+
+    .bot .message-content strong {
+      color: var(--mineral-blue);
+    }
+
+    .user .message-content strong {
+      color: white;
+      font-weight: 700;
+    }
+
+    .message-content em {
+      font-style: italic;
+      color: var(--rock-gray);
+    }
+
+    .user .message-content em {
+      color: rgba(255, 255, 255, 0.95);
+    }
+
+    .message-content code {
+      background: var(--sediment-beige);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--mineral-blue);
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .user .message-content code {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .message-content a {
+      color: var(--mineral-blue);
+      text-decoration: underline;
+      font-weight: 600;
+    }
+
+    .message-content a:hover {
+      color: var(--slate-blue);
+    }
+
+    .user .message-content a {
+      color: white;
+      text-decoration: underline;
     }
 
     .message-content img {
@@ -684,7 +739,7 @@
         <div class="header-icon">🪨</div>
         Rocky
       </h1>
-      <p>Your expert guide to Earth sciences and geology</p>
+      <p>Your expert guide to Earth sciences and Geology</p>
     </div>
     <div class="header-controls">
       <button class="icon-btn" onclick="newChat()">
@@ -863,7 +918,7 @@ input.addEventListener("input", function() {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONTENT RENDERING
+// CONTENT RENDERING WITH MARKDOWN SUPPORT
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderContent(container, text) {
@@ -878,7 +933,7 @@ function renderContent(container, text) {
     if (textBefore) {
       const span = document.createElement('span');
       span.className = 'text-part';
-      span.textContent = textBefore;
+      span.innerHTML = renderMarkdown(textBefore);
       container.appendChild(span);
     }
 
@@ -898,9 +953,33 @@ function renderContent(container, text) {
   if (textAfter) {
     const span = document.createElement('span');
     span.className = 'text-part';
-    span.textContent = textAfter;
+    span.innerHTML = renderMarkdown(textAfter);
     container.appendChild(span);
   }
+}
+
+function renderMarkdown(text) {
+  // Escape HTML first
+  text = escapeHtml(text);
+  
+  // Bold: **text** or __text__
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  
+  // Italic: *text* or _text_ (but not in the middle of words)
+  text = text.replace(/\*([^\*\s][^\*]*?)\*/g, '<em>$1</em>');
+  text = text.replace(/_([^_\s][^_]*?)_/g, '<em>$1</em>');
+  
+  // Inline code: `code`
+  text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+  
+  // Links: [text](url)
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  
+  // Line breaks
+  text = text.replace(/\n/g, '<br>');
+  
+  return text;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
